@@ -4,22 +4,50 @@ import requests
 from bs4 import BeautifulSoup
 import pyshorteners
 from pyshorteners import Shorteners
+import random
 
 bot_on = True
 
-# Scrapes google images for a specified input
-def find_sb_reference(message):
-    url = "https://www.google.com/search?q=Spongebob" + " " + message + "&safe=active&sxsrf=ACYBGNTyWYkdc3rQDOfPTFinpBDT55OP2Q:1575598277416&source=lnms&tbm=isch&sa=X&ved=2ahUKEwjJ9Yj9-J_mAhXiQd8KHaNSALcQ_AUoAnoECAEQBA&biw=1440&bih=700"
-
+# Scrapes spongebob fandom for a specified input
+def get_search_link(message):
+    url = "https://spongebob.fandom.com/wiki/Special:Search?query=" + message
     page = requests.get(url).text
-    soup = BeautifulSoup(page, 'html.parser')
+    soup = BeautifulSoup(page, "html.parser")
 
-    for raw_img in soup.find_all('img'):
-      link = raw_img.get('src')
-      if link:
-        if ".png" in link or ".jpg" in link:
+
+    for result_link in soup.find_all("a","result-link"):
+        link = result_link.get("href")
+        if link:
+            return link
+        else:
             continue
-        return link
+    return 1
+
+
+# once the page is found, we can grab an image from it
+def get_image_link(result_link):
+    if result_link == 1:
+        return 1
+    url = result_link
+    page = requests.get(url).text
+    soup = BeautifulSoup(page, "html.parser")
+
+    img_links = soup.find_all("img")[1:5]
+
+    while True:
+        if len(img_links) == 0:
+            return
+
+        rdm_link = random.choice(img_links)
+        link = rdm_link.get("src")
+
+        if "gif" not in link:
+            return link
+        else:
+            img_links.remove(rdm_link)
+            continue
+    return 1
+
 
 # Just so I'm not googling bad things
 def has_bad_word(message):
@@ -38,7 +66,7 @@ def has_bad_word(message):
         raise
 
 
-# Shortens the google image url
+# Shortens the url
 def shortened(url):
     try:
         s = pyshorteners.Shortener(Shorteners.TINYURL)
@@ -50,28 +78,39 @@ def shortened(url):
 
 
 # Initiates the bot
-client = commands.Bot(command_prefix = '!')
+client = commands.Bot(command_prefix = "!")
 
 @client.event
 async def on_ready():
-    print('Spongebot is online')
+    print("Spongebot is online")
 
 
 
-# Replies to other messages with a link to a spongebob image. There is a cool down
+# Replies to other messages with a link to a spongebob image.
 @client.event
 async def on_message(message):
     global bot_on
 
-    if bot_on and not message.content.startswith('!'):
-        if client.user.id != message.author.id:
-            channel = message.channel
+    reserved_words = ["!spongebot", "!off"]
 
-            if not has_bad_word(message.content):
-                the_link = find_sb_reference(message.content)
-                the_link = shortened(the_link)
-                await channel.send(the_link)
-    await client.process_commands(message) # necessary when mixing on_messsage with commands
+    if message.content in reserved_words:
+        await client.process_commands(message)
+    else:
+        if bot_on:
+            if client.user.id != message.author.id:
+                if message.content.startswith("!"):
+                    channel = message.channel
+
+                    msg = message.content
+                    msg = msg[1:]
+
+                    if not has_bad_word(msg):
+                        search_link = get_search_link(msg)
+                        image_link = get_image_link(search_link)
+                        image_link = shortened(image_link)
+                        await channel.send(image_link)
+
+
 
 # turns the bot on
 @client.command()
@@ -79,7 +118,7 @@ async def spongebot(ctx):
     global bot_on
     if not bot_on:
         bot_on = True
-        await ctx.send("I'm ready!!!")
+        await ctx.send("I'm ready!!!\n Here are all of my commands:\n !spongebot - turns me on\n !off - turns me off\n Type ! followed by anything else for a spongebob picture.")
 
 # turns the bot off
 @client.command()
@@ -90,4 +129,4 @@ async def off(ctx):
         await ctx.send("Okay, bye!")
 
 # Runs the bot on discord
-client.run('INSERT_API_KEY_HERE')
+client.run("insert your API key here") # - Spongebot Squarepants
