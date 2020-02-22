@@ -1,52 +1,37 @@
 import discord
 from discord.ext import commands
-import requests
-from bs4 import BeautifulSoup
 import pyshorteners
 from pyshorteners import Shorteners
+import praw
 import random
 
 bot_on = True
 
-# Scrapes spongebob fandom for a specified input
-def get_search_link(message):
-    url = "https://spongebob.fandom.com/wiki/Special:Search?query=" + message
-    page = requests.get(url).text
-    soup = BeautifulSoup(page, "html.parser")
+# uses the reddit api to search for spongebob memes on r/BikiniBottomTwitter
+def get_reply_and_image(message):
+    reddit = praw.Reddit(client_id='insert your client id',
+                         client_secret='insert your client secret',
+                         user_agent='insert your user_agent')
 
+    bbt = reddit.subreddit("BikiniBottomTwitter")
 
-    for result_link in soup.find_all("a","result-link"):
-        link = result_link.get("href")
-        if link:
-            return link
-        else:
-            continue
-    return 1
+    url_list = {}
+    for post in bbt.search(message, limit=5):
+        link = post.url
+        title = post.title
+        if "imgur.com" in link:
+            link += ".jpg"
+        if ".png" in link or ".jpg" in link:
+            url_list[title] = link
 
+    if len(url_list) == 0:
+        title = ""
+        url = 1
+    else:
+        title = random.choice(list(url_list.keys()))
+        url = url_list[title]
 
-# once the page is found, we can grab an image from it
-def get_image_link(result_link):
-    if result_link == 1:
-        return 1
-    url = result_link
-    page = requests.get(url).text
-    soup = BeautifulSoup(page, "html.parser")
-
-    img_links = soup.find_all("img")[1:5]
-
-    while True:
-        if len(img_links) == 0:
-            return
-
-        rdm_link = random.choice(img_links)
-        link = rdm_link.get("src")
-
-        if "gif" not in link:
-            return link
-        else:
-            img_links.remove(rdm_link)
-            continue
-    return 1
+    return(title,url)
 
 
 # Just so I'm not googling bad things
@@ -66,7 +51,7 @@ def has_bad_word(message):
         raise
 
 
-# Shortens the url
+# Shortens the google image url
 def shortened(url):
     try:
         s = pyshorteners.Shortener(Shorteners.TINYURL)
@@ -78,15 +63,15 @@ def shortened(url):
 
 
 # Initiates the bot
-client = commands.Bot(command_prefix = "!")
+client = commands.Bot(command_prefix = '!')
 
 @client.event
 async def on_ready():
-    print("Spongebot is online")
+    print('Spongebot is online')
 
 
 
-# Replies to other messages with a link to a spongebob image.
+# Replies to other messages with a link to a spongebob meme
 @client.event
 async def on_message(message):
     global bot_on
@@ -105,10 +90,16 @@ async def on_message(message):
                     msg = msg[1:]
 
                     if not has_bad_word(msg):
-                        search_link = get_search_link(msg)
-                        image_link = get_image_link(search_link)
-                        image_link = shortened(image_link)
-                        await channel.send(image_link)
+                        (reply,url) = get_reply_and_image(msg)
+                        url = shortened(url)
+
+                        if reply == "":
+                            await channel.send(url)
+                            return
+
+                        await channel.send(reply)
+                        await channel.send(url)
+
 
 
 
@@ -129,4 +120,4 @@ async def off(ctx):
         await ctx.send("Okay, bye!")
 
 # Runs the bot on discord
-client.run("insert your API key here") # - Spongebot Squarepants
+client.run('insert your API key here') # - Spongebot Squarepants
